@@ -1,23 +1,33 @@
 ﻿import { useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Bell, Bookmark, Compass, Home, LogOut, Plus, Repeat, Search, User } from 'lucide-react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Bell, Bookmark, Compass, Home, LogOut, Repeat, Search, User } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { useNotificationsStore } from '@/stores/notifications.store'
-import { OPEN_COMPOSER_EVENT } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { SkipToContent } from '@/components/ui/SkipToContent'
 import { Avatar } from '@/components/ui/Avatar'
-import { CommunityContextBadge } from '@/components/location/CommunityContextBadge'
 
+/**
+ * Shared front-facing navigation (spec §2.2): compact mobile bottom nav with
+ * exactly five primary destinations — Home, Discover, #Exchange, Activity,
+ * Profile. Secondary features live inside their screens (composer on the
+ * feed and profile). Permission-aware: guests are handed to CHS sign-in and
+ * returned to the action they attempted (spec §2.1); business accounts get
+ * their dashboard as Profile, consumers get the profile screen.
+ */
 export function PublicLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, authStatus, logout } = useAuthStore()
   const unread = useNotificationsStore((s) => s.items.filter((n) => !n.read).length)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const openComposer = () => {
-    if (window.location.pathname !== '/community') navigate('/community')
-    setTimeout(() => window.dispatchEvent(new Event(OPEN_COMPOSER_EVENT)), 60)
+  const isAuthenticated = authStatus === 'authenticated' && !!user
+  const isBusiness = user?.userType === 'business'
+
+  /** Sign-in handoff: after authentication the user lands on the tab they tapped. */
+  const openSignIn = (target: string) => {
+    navigate('/auth/login', { state: { from: { pathname: target } } })
   }
 
   const handleLogout = () => {
@@ -32,6 +42,18 @@ export function PublicLayout() {
       isActive ? 'text-primary-600' : 'text-gray-500',
     )
 
+  const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      'rounded-lg px-3 py-1.5 text-sm font-medium transition',
+      isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50',
+    )
+
+  const guestButtonClass =
+    'flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] text-gray-500'
+
+  const activityTo = '/community/notifications'
+  const profileTo = isBusiness ? '/business/dashboard' : '/community/profile'
+
   return (
     <div className='min-h-screen bg-gray-50'>
       <SkipToContent />
@@ -40,9 +62,23 @@ export function PublicLayout() {
         <div className='container-page flex h-14 items-center justify-between gap-2'>
           <div className='flex min-w-0 items-center gap-2 sm:gap-3'>
             <Link to='/community' className='text-base font-bold text-gray-900'>
-              Community
+              CHS
             </Link>
-            <CommunityContextBadge />
+            {/* Desktop primary nav — the bottom nav is mobile-only */}
+            <nav className='hidden items-center gap-1 md:flex' aria-label='Primary'>
+              <NavLink to='/community' end className={desktopLinkClass}>
+                Home
+              </NavLink>
+              <NavLink to='/community/discover' className={desktopLinkClass}>
+                Discover
+              </NavLink>
+              <NavLink to='/community/discover/exchanges' className={desktopLinkClass}>
+                #Exchange
+              </NavLink>
+              <NavLink to={activityTo} className={desktopLinkClass}>
+                Activity
+              </NavLink>
+            </nav>
           </div>
 
           <div className='flex items-center gap-1'>
@@ -52,32 +88,33 @@ export function PublicLayout() {
 
             <Link to='/community/notifications' className='btn-icon relative text-gray-600' aria-label='Notifications'>
               <Bell className='h-5 w-5' />
-              {unread > 0 && (
+              {/* Only a signed-in account has its own notifications — no counts on guest surfaces. */}
+              {isAuthenticated && unread > 0 && (
                 <span className='absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white'>
                   {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </Link>
 
-            {user && authStatus === 'authenticated' ? (
+            {isAuthenticated ? (
               <div className='relative'>
                 <button onClick={() => setMenuOpen((o) => !o)} className='ml-1' aria-label='Account menu'>
-                  <Avatar src={user.avatarUrl} name={user.name} size='sm' />
+                  <Avatar src={user!.avatarUrl} name={user!.name} size='sm' />
                 </button>
                 {menuOpen && (
                   <>
                     <div className='fixed inset-0 z-20' onClick={() => setMenuOpen(false)} />
                     <div className='absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg'>
                       <div className='border-b border-gray-100 px-3 py-2'>
-                        <p className='truncate text-sm font-semibold text-gray-900'>{user.name}</p>
-                        <p className='truncate text-xs capitalize text-gray-500'>{user.userType}</p>
+                        <p className='truncate text-sm font-semibold text-gray-900'>{user!.name}</p>
+                        <p className='truncate text-xs capitalize text-gray-500'>{user!.userType}</p>
                       </div>
                       <Link
-                        to='/community/activity'
+                        to={profileTo}
                         onClick={() => setMenuOpen(false)}
                         className='flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50'
                       >
-                        <User className='h-4 w-4' /> Your activity
+                        <User className='h-4 w-4' /> Profile
                       </Link>
                       <Link
                         to='/community/saved'
@@ -97,7 +134,7 @@ export function PublicLayout() {
                 )}
               </div>
             ) : (
-              <Link to='/auth/login' className='btn-primary btn-sm ml-1'>
+              <Link to='/auth/login' state={{ from: location }} className='btn-primary btn-sm ml-1'>
                 Sign in
               </Link>
             )}
@@ -119,28 +156,41 @@ export function PublicLayout() {
             <Compass className='h-5 w-5' />
             <span>Discover</span>
           </NavLink>
-          <button onClick={openComposer} className='flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] text-gray-500'>
-            <Plus className='h-5 w-5 rounded-full bg-primary-600 p-0.5 text-white' />
-            <span>Create</span>
-          </button>
           <NavLink to='/community/discover/exchanges' className={navLinkClass}>
             <Repeat className='h-5 w-5' />
-            <span>Exchange</span>
+            <span>#Exchange</span>
           </NavLink>
-          {user && authStatus === 'authenticated' ? (
-            <NavLink to='/community/activity' className={navLinkClass}>
-              <User className='h-5 w-5' />
+          {isAuthenticated ? (
+            <NavLink to={activityTo} className={navLinkClass}>
+              <span className='relative'>
+                <Bell className='h-5 w-5' />
+                {unread > 0 && (
+                  <span className='absolute -right-1.5 -top-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-semibold text-white'>
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </span>
               <span>Activity</span>
             </NavLink>
           ) : (
-            <NavLink to='/auth/login' className={navLinkClass}>
+            <button onClick={() => openSignIn(activityTo)} className={guestButtonClass}>
+              <Bell className='h-5 w-5' />
+              <span>Activity</span>
+            </button>
+          )}
+          {isAuthenticated ? (
+            <NavLink to={profileTo} className={navLinkClass}>
               <User className='h-5 w-5' />
-              <span>Sign in</span>
+              <span>Profile</span>
             </NavLink>
+          ) : (
+            <button onClick={() => openSignIn(profileTo)} className={guestButtonClass}>
+              <User className='h-5 w-5' />
+              <span>Profile</span>
+            </button>
           )}
         </div>
       </nav>
     </div>
   )
 }
-

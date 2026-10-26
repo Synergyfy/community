@@ -1,5 +1,6 @@
 ﻿import { api } from '@/lib/api'
-import type { PostType } from '@/lib/constants'
+import type { ContentVisibility, PostType } from '@/lib/constants'
+import { canViewPost, viewerFromUser } from '@/lib/permissions'
 import type {
   LocationContext,
   PublicComment,
@@ -8,6 +9,8 @@ import type {
   PublicUser,
 } from '@/types/community-public'
 import { demoComments, demoCommunities, demoPosts } from '@/data/demo-public'
+import { useAuthStore } from '@/stores/auth.store'
+import { reportsService } from '@/services/reports.service'
 
 export interface FeedQuery {
   filter?: 'all' | 'businesses' | 'consumers' | 'groups'
@@ -23,6 +26,8 @@ export interface CreatePostInput {
   mediaUrls?: string[]
   hashtags?: string[]
   location?: LocationContext | null
+  /** Audience the author chose in the composer (spec §2.4/§3.2 parity). */
+  visibility?: ContentVisibility
   author: PublicUser
 }
 
@@ -41,6 +46,41 @@ function matchesFilter(post: PublicPost, filter: FeedQuery['filter']): boolean {
   return true
 }
 
+/** Signed-in viewer (or public visitor) used for demo-mode permission checks. */
+function currentViewer() {
+  return viewerFromUser(useAuthStore.getState().user)
+}
+
+function viewablePosts(posts: PublicPost[]): PublicPost[] {
+  const viewer = currentViewer()
+  return posts.filter((p) => canViewPost(viewer, p))
+}
+
+/**
+ * Every post known to the demo store — same object references as the source
+ * arrays, so admin mutations made on these objects are reflected everywhere.
+ */
+export function getAllDemoPosts(): PublicPost[] {
+  return [...createdPosts, ...demoPosts]
+}
+
+/** Hard-delete a demo post from every source array (admin removal, §5.2). */
+export function deleteDemoPostEverywhere(id: string): void {
+  const ci = createdPosts.findIndex((p) => p.id === id)
+  if (ci >= 0) createdPosts.splice(ci, 1)
+  const di = demoPosts.findIndex((p) => p.id === id)
+  if (di >= 0) demoPosts.splice(di, 1)
+}
+
+/**
+ * Every comment known to the demo store — same object references as the
+ * source array, so admin moderation of comments is reflected on public
+ * surfaces too (§3.4).
+ */
+export function getAllDemoComments(): PublicComment[] {
+  return [...demoComments]
+}
+
 function sortNewest(posts: PublicPost[]): PublicPost[] {
   return [...posts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
@@ -54,7 +94,9 @@ export const communityApi = {
       throw new Error('empty')
     } catch {
       const all = [...createdPosts, ...demoPosts]
-      return sortNewest(all.filter((p) => inLocation(p, query.location) && matchesFilter(p, query.filter)))
+      return sortNewest(
+        viewablePosts(all).filter((p) => inLocation(p, query.location) && matchesFilter(p, query.filter)),
+      )
     }
   },
 
@@ -66,6 +108,7 @@ export const communityApi = {
         content: input.content,
         mediaUrls: input.mediaUrls,
         hashtags: input.hashtags,
+        visibility: input.visibility,
       })
       const data = res.data?.data as PublicPost | undefined
       if (data) return data
@@ -77,7 +120,7 @@ export const communityApi = {
         author: input.author,
         postType: input.type,
         status: 'published',
-        visibility: 'public',
+        visibility: input.visibility ?? 'public',
         title: input.title ?? null,
         content: input.content,
         mediaUrls: input.mediaUrls ?? null,
@@ -96,9 +139,11 @@ export const communityApi = {
   async getPost(id: string): Promise<PublicPost | null> {
     try {
       const res = await api.get(`/community/posts/${id}`)
-      return (res.data?.data as PublicPost) || null
+      const post = (res.data?.data as PublicPost) || null
+      return post && canViewPost(currentViewer(), post) ? post : null
     } catch {
-      return createdPosts.find((p) => p.id === id) || demoPosts.find((p) => p.id === id) || null
+      const post = createdPosts.find((p) => p.id === id) || demoPosts.find((p) => p.id === id) || null
+      return post && canViewPost(currentViewer(), post) ? post : null
     }
   },
 
@@ -122,7 +167,12 @@ export const communityApi = {
       if (data) return data
       throw new Error('empty')
     } catch {
-      return sortNewest([...createdPosts, ...demoPosts].filter((p) => p.authorId === authorId))
+      const all = [...createdPosts, ...demoPosts].filter((p) => p.authorId === authorId)
+      // Authors manage their own posts in every state (draft/pending/rejected);
+      // everyone else only sees what is published and permitted for them.
+      const viewer = currentViewer()
+      const own = viewer?.id === authorId
+      return sortNewest(own ? all : viewablePosts(all))
     }
   },
 
@@ -131,7 +181,9 @@ export const communityApi = {
       const res = await api.get(`/community/posts/${postId}/comments`)
       return (res.data?.data as PublicComment[]) || []
     } catch {
-      return demoComments.filter((c) => c.postId === postId)
+      // Comments removed by moderation are not shown publicly (§3.4); admins
+      // read the full list through adminApi.listComments().
+      return demoComments.filter((c) => c.postId === postId && (c.status ?? 'visible') === 'visible')
     }
   },
 
@@ -161,7 +213,14 @@ export const communityApi = {
   },
 
   async reportPost(id: string, reason: string, details?: string): Promise<void> {
-    await api.post(`/community/posts/${id}/report`, { reason, details })
+    const post = [...createdPosts, ...demoPosts].find((p) => p.id === id)
+    await reportsService.submitReport({
+      targetType: 'post',
+      targetId: id,
+      targetLabel: post?.title ?? post?.content.slice(0, 80) ?? null,
+      reasonCode: reason,
+      details: details ?? null,
+    })
   },
 
   async addComment(postId: string, content: string, parentId?: string): Promise<PublicComment> {
@@ -171,12 +230,26 @@ export const communityApi = {
       if (data) return data
       throw new Error('empty')
     } catch {
+      // The demo fallback authors the comment as the signed-in account, so the
+      // author sees (and can delete) their own comments exactly like the backend would.
+      const authUser = useAuthStore.getState().user
+      const author: PublicUser = authUser
+        ? {
+            id: authUser.id,
+            name: authUser.name,
+            userType: authUser.userType,
+            avatarUrl: authUser.avatarUrl ?? null,
+            businessId: authUser.businessId ?? null,
+            businessName: authUser.businessName ?? null,
+            isVerified: authUser.isVerified,
+          }
+        : { id: 'guest', name: 'Guest', userType: 'public', avatarUrl: null }
       return {
         id: `demo-${Date.now()}`,
         postId,
         parentId: parentId ?? null,
-        authorId: 'me',
-        author: { id: 'me', name: 'You', userType: 'consumer', avatarUrl: null },
+        authorId: author.id,
+        author,
         content,
         likeCount: 0,
         createdAt: new Date().toISOString(),
