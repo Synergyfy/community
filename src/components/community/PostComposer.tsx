@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ImagePlus, Megaphone, MessageSquarePlus, Repeat, Tag } from 'lucide-react'
 import { communityApi } from '@/services/community.service'
-import { OPEN_COMPOSER_EVENT, PostType } from '@/lib/constants'
+import { OPEN_COMPOSER_EVENT, PostType, type ContentVisibility } from '@/lib/constants'
 import { useAuthStore } from '@/stores/auth.store'
 import { useAuthGate } from '@/hooks/useAuthGate'
 import { useCommunityLocation } from '@/hooks/useCommunityLocation'
@@ -17,6 +17,15 @@ const TYPE_OPTIONS = [
   { id: PostType.OFFER, label: 'Offer', icon: Tag },
   { id: PostType.CAMPAIGN, label: 'Campaign', icon: Megaphone },
   { id: PostType.GROUP, label: 'Group', icon: Repeat },
+] as const
+
+/** Same audience control as the business composer (spec §2.4/§3.2 parity).
+ *  Per-content-type visibility rules stay open pending §9-3 — this ships the
+ *  control and records exactly what the author chose. */
+const VISIBILITY_OPTIONS = [
+  { id: 'public', label: 'Everyone', hint: 'Visible to the whole community, including visitors.' },
+  { id: 'both', label: 'Signed-in members', hint: 'Only signed-in business and consumer accounts.' },
+  { id: 'business', label: 'Businesses only', hint: 'Only business accounts in the community.' },
 ] as const
 
 interface PostComposerProps {
@@ -41,6 +50,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
   const [content, setContent] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [showImage, setShowImage] = useState(false)
+  const [visibility, setVisibility] = useState<ContentVisibility>('public')
 
   const needsTitle = type !== PostType.STANDARD
 
@@ -53,6 +63,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
         mediaUrls: imageUrl.trim() ? [imageUrl.trim()] : undefined,
         hashtags: extractHashtags(content),
         location: location as LocationContext | null,
+        visibility,
         author: user as PublicUser,
       }),
     onSuccess: (post) => {
@@ -69,6 +80,7 @@ export function PostComposer({ onCreated }: PostComposerProps) {
     setContent('')
     setImageUrl('')
     setShowImage(false)
+    setVisibility('public')
   }
 
   const canSubmit = content.trim().length > 0 && (!needsTitle || title.trim().length > 0) && !mutation.isPending
@@ -163,6 +175,34 @@ export function PostComposer({ onCreated }: PostComposerProps) {
               className='input-field'
             />
           )}
+
+          {/* Audience (spec §2.4 parity with the business composer) */}
+          <fieldset>
+            <legend className='mb-1.5 text-xs font-semibold text-gray-700'>Who can see this post</legend>
+            <div className='space-y-1'>
+              {VISIBILITY_OPTIONS.map((opt) => (
+                <label
+                  key={opt.id}
+                  className={cn(
+                    'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2',
+                    visibility === opt.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50',
+                  )}
+                >
+                  <input
+                    type='radio'
+                    name='community-post-visibility'
+                    className='mt-0.5'
+                    checked={visibility === opt.id}
+                    onChange={() => setVisibility(opt.id as ContentVisibility)}
+                  />
+                  <span className='min-w-0'>
+                    <span className='block text-sm font-medium text-gray-900'>{opt.label}</span>
+                    <span className='block text-xs text-gray-500'>{opt.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <div className='flex items-center justify-between'>
             <button

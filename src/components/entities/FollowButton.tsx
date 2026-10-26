@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Plus } from 'lucide-react'
 import { useNotificationsStore } from '@/stores/notifications.store'
+import { useEngagementStore } from '@/stores/engagement.store'
+import { useAuthGate } from '@/hooks/useAuthGate'
 import { cn } from '@/lib/utils'
 
 interface FollowButtonProps {
@@ -11,16 +13,36 @@ interface FollowButtonProps {
   className?: string
 }
 
-export function FollowButton({ targetType, initialFollowing, size = 'md', className }: FollowButtonProps) {
+/**
+ * Follow action. Requires sign-in (spec §2.1/§4.2 — the auth gate returns the
+ * user to this action afterwards). Campaign follows are recorded as real
+ * engagement events so they appear truthfully in My Campaigns (spec §4.3);
+ * viewing a campaign is never treated as following it.
+ */
+export function FollowButton({ targetType, targetId, initialFollowing, size = 'md', className }: FollowButtonProps) {
   const addNotification = useNotificationsStore((s) => s.addNotification)
-  const [following, setFollowing] = useState(!!initialFollowing)
+  const { requireAuth } = useAuthGate()
+  const joinedCampaignIds = useEngagementStore((s) => s.joinedCampaignIds)
+  const toggleJoinCampaign = useEngagementStore((s) => s.toggleJoinCampaign)
+  const [following, setFollowing] = useState(
+    initialFollowing ?? (targetType === 'campaign' ? joinedCampaignIds.includes(targetId) : false),
+  )
+
+  // Keep campaign follows in sync with recorded engagement events.
+  useEffect(() => {
+    if (targetType !== 'campaign') return
+    setFollowing(joinedCampaignIds.includes(targetId))
+  }, [joinedCampaignIds, targetId, targetType])
 
   const toggle = () => {
-    const next = !following
-    setFollowing(next)
-    if (next) {
-      addNotification({ type: 'follow', title: 'Following', body: `You are now following this ${targetType}.` })
-    }
+    requireAuth(() => {
+      const next = !following
+      setFollowing(next)
+      if (targetType === 'campaign') toggleJoinCampaign(targetId)
+      if (next) {
+        addNotification({ type: 'follow', title: 'Following', body: `You are now following this ${targetType}.` })
+      }
+    })
   }
 
   return (

@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Store, Users } from 'lucide-react'
 import { discoverApi } from '@/services/discover.service'
@@ -105,7 +105,12 @@ export function DiscoverPage() {
 
       {campaigns.length > 0 && (
         <section>
-          <h2 className='mb-2 text-sm font-semibold text-gray-900'>Campaigns to support</h2>
+          <div className='mb-2 flex items-center justify-between'>
+            <h2 className='text-sm font-semibold text-gray-900'>Campaigns to support</h2>
+            <Link to='/community/campaigns' className='text-sm font-medium text-primary-600 hover:underline'>
+              View all
+            </Link>
+          </div>
           <div className='flex gap-3 overflow-x-auto scrollbar-hide pb-1'>
             {campaigns.map((campaign) => (
               <div key={campaign.id} className='w-56 shrink-0'>

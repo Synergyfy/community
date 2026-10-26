@@ -1,8 +1,10 @@
 ﻿import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, MapPin, Plus, Repeat } from 'lucide-react'
+import { ArrowLeft, Info, Lock, MapPin, Plus, Repeat } from 'lucide-react'
 import { discoverApi } from '@/services/discover.service'
+import { categoriesService } from '@/services/categories.service'
+import { adminConfigService } from '@/services/admin-config.service'
 import { useAuthGate } from '@/hooks/useAuthGate'
 import { useCommunityLocation } from '@/hooks/useCommunityLocation'
 import { useAuthStore } from '@/stores/auth.store'
@@ -16,7 +18,7 @@ import { Input } from '@/components/ui/Input'
 import { locationLabel, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ExchangeType as ExchangeTypeValue } from '@/lib/constants'
-import type { PublicExchange } from '@/types/community-public'
+import type { ExchangeTypeConfig, PublicExchange } from '@/types/community-public'
 
 type TypeFilter = 'all' | ExchangeTypeValue
 
@@ -40,6 +42,30 @@ export function ExchangeListPage() {
   const [description, setDescription] = useState('')
   const [offering, setOffering] = useState('')
   const [seeking, setSeeking] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  // Active exchange categories come from the admin-managed store (§5.2).
+  const exchangeCategories = categoriesService.listActiveCategories('exchange')
+
+  // Type switches from Community Configuration (§5.3) — consumed here, not
+  // duplicated: disabled types stop new submissions (history stays visible),
+  // whoCanCreate restricts by account type, requiresApproval is surfaced.
+  const exchangeConfig = adminConfigService.getConfig()
+  const typeCfg = (t: ExchangeTypeValue): ExchangeTypeConfig =>
+    exchangeConfig.exchangeTypes[t] ?? { enabled: true, whoCanCreate: 'both', requiresApproval: false }
+  const typePermitted = (t: ExchangeTypeValue): boolean => {
+    const cfg = typeCfg(t)
+    const role = user?.userType ?? 'consumer'
+    if (role === 'admin') return true
+    return cfg.whoCanCreate === 'both' || cfg.whoCanCreate === role
+  }
+  const composerTypeOptions = EXCHANGE_TYPE_OPTIONS.filter((o) => typeCfg(o.id).enabled)
+  const permittedTypeOptions = composerTypeOptions.filter((o) => typePermitted(o.id))
+  const WHO_LABEL: Record<string, string> = {
+    both: 'Businesses and consumers',
+    business: 'Businesses only',
+    consumer: 'Consumers only',
+    admin: 'Admins only',
+  }
 
   const { data: exchanges = [], isLoading } = useQuery({
     queryKey: ['community', 'exchanges', location?.cityName],
@@ -54,6 +80,7 @@ export function ExchangeListPage() {
         description: description.trim(),
         offering: offering.trim(),
         seeking: seeking.trim(),
+        categoryId: categoryId || undefined,
         location: location,
         author: user ?? { id: 'me', name: 'You', userType: 'consumer', avatarUrl: null },
       }),
@@ -71,14 +98,25 @@ export function ExchangeListPage() {
     setDescription('')
     setOffering('')
     setSeeking('')
+    setCategoryId('')
   }
 
   const canSubmit =
-    title.trim().length > 2 && offering.trim().length > 0 && seeking.trim().length > 0 && !createMutation.isPending
+    permittedTypeOptions.length > 0 &&
+    typePermitted(exchangeType) &&
+    title.trim().length > 2 &&
+    offering.trim().length > 0 &&
+    seeking.trim().length > 0 &&
+    !createMutation.isPending
 
   const filtered = typeFilter === 'all' ? exchanges : exchanges.filter((e) => e.exchangeType === typeFilter)
 
-  const openComposer = () => requireAuth(() => setComposerOpen(true))
+  const openComposer = () =>
+    requireAuth(() => {
+      // Land on a type this account can actually create (§5.3 who-can-create).
+      if (!typePermitted(exchangeType) && permittedTypeOptions[0]) setExchangeType(permittedTypeOptions[0].id)
+      setComposerOpen(true)
+    })
 
   return (
     <div className='container-page max-w-2xl space-y-4 py-3 sm:py-4'>
@@ -140,23 +178,48 @@ export function ExchangeListPage() {
 
       <Modal isOpen={composerOpen} onClose={() => setComposerOpen(false)} title='Post an exchange'>
         <div className='space-y-4'>
-          <div className='flex gap-1.5 overflow-x-auto scrollbar-hide'>
-            {EXCHANGE_TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type='button'
-                onClick={() => setExchangeType(opt.id)}
-                className={cn(
-                  'whitespace-nowrap rounded-full border px-3 py-1.5 text-sm',
-                  exchangeType === opt.id
-                    ? 'border-primary-500 bg-primary-50 text-primary-700'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50',
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          {permittedTypeOptions.length === 0 ? (
+            <p className='rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800'>
+              New #Exchange submissions are closed for your account type right now — Community admins control this on
+              Configuration.
+            </p>
+          ) : (
+            <div className='flex gap-1.5 overflow-x-auto scrollbar-hide' role='group' aria-label='Exchange type'>
+              {composerTypeOptions.map((opt) => {
+                const permitted = typePermitted(opt.id)
+                return (
+                  <button
+                    key={opt.id}
+                    type='button'
+                    disabled={!permitted}
+                    title={permitted ? undefined : `${WHO_LABEL[typeCfg(opt.id).whoCanCreate] ?? 'Restricted'} — not available for your account`}
+                    onClick={() => permitted && setExchangeType(opt.id)}
+                    className={cn(
+                      'flex items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm',
+                      !permitted
+                        ? 'cursor-not-allowed border-gray-200 text-gray-300'
+                        : exchangeType === opt.id
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                    )}
+                  >
+                    {!permitted && <Lock className='h-3 w-3' />}
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {typePermitted(exchangeType) && typeCfg(exchangeType).requiresApproval && (
+            <p className='flex items-start gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800'>
+              <Info className='mt-0.5 h-3.5 w-3.5 shrink-0' />
+              <span>
+                This type is configured to require admin approval before publishing (Community Configuration). The
+                review workflow is pending a product decision (§17-2) — in this demo the item is published immediately.
+              </span>
+            </p>
+          )}
 
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder='What is this exchange about?' />
 
@@ -178,6 +241,27 @@ export function ExchangeListPage() {
               <Input value={seeking} onChange={(e) => setSeeking(e.target.value)} placeholder='e.g. Marketing help' />
             </div>
           </div>
+
+          {exchangeCategories.length > 0 && (
+            <div className='form-group'>
+              <label className='label' htmlFor='exchange-category'>
+                Category
+              </label>
+              <select
+                id='exchange-category'
+                className='input-field'
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+              >
+                <option value=''>No category</option>
+                {exchangeCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className='flex justify-end gap-2'>
             <Button variant='secondary' onClick={() => setComposerOpen(false)}>
