@@ -17,6 +17,42 @@
 } as const
 export type PostType = (typeof PostType)[keyof typeof PostType]
 
+/**
+ * Publication lifecycle for posts and exchange items (spec §3.2, §3.3, §5.2, §7).
+ * Only PUBLISHED content may appear on public surfaces; authors always see
+ * their own items in every state; Admins see everything.
+ */
+export const PostStatus = {
+  DRAFT: 'draft',
+  PENDING: 'pending',
+  PUBLISHED: 'published',
+  REJECTED: 'rejected',
+  ARCHIVED: 'archived',
+} as const
+export type PostStatus = (typeof PostStatus)[keyof typeof PostStatus]
+
+/** Audience/visibility rules (spec §4.1, §5.2). Enforced by lib/permissions.ts. */
+export type ContentVisibility = 'public' | 'business' | 'consumer' | 'both' | 'group' | 'private'
+
+/** Lifecycle of a tracked sharing/attribution event (spec §5.4). */
+export const ShareEventStatus = {
+  PENDING: 'pending',
+  ATTRIBUTED: 'attributed',
+  QUALIFIED: 'qualified',
+  REJECTED: 'rejected',
+} as const
+export type ShareEventStatus = (typeof ShareEventStatus)[keyof typeof ShareEventStatus]
+
+/** Events the attribution engine may record (spec §5.4 — final set pending §9 decision). */
+export const ShareEventType = {
+  VISIT: 'visit',
+  SIGNUP: 'signup',
+  CAMPAIGN_JOIN: 'campaign_join',
+  CONTRIBUTION: 'contribution',
+  OTHER: 'other',
+} as const
+export type ShareEventType = (typeof ShareEventType)[keyof typeof ShareEventType]
+
 export const ExchangeType = {
   OFFER_REQUEST: 'offer_request',
   SWAP: 'swap',
