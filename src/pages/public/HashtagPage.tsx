@@ -1,21 +1,18 @@
-import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Hash } from 'lucide-react'
 import { discoverApi } from '@/services/discover.service'
-import { useAuthGate } from '@/hooks/useAuthGate'
+import { usePostActions } from '@/hooks/usePostActions'
 import type { PublicPost } from '@/types/community-public'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PostSkeleton } from '@/components/community/PostSkeleton'
 import { PostCard } from '@/components/community/PostCard'
-import { ShareModal } from '@/components/sharing/ShareModal'
 
 export function HashtagPage() {
   const { tag } = useParams<{ tag: string }>()
   const navigate = useNavigate()
-  const { requireAuth } = useAuthGate()
-  const [shareId, setShareId] = useState<string | null>(null)
+  const actions = usePostActions()
 
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ['hashtag', tag],
@@ -23,7 +20,11 @@ export function HashtagPage() {
     enabled: !!tag,
   })
 
+  // Admin flags (§3.3) — same record the Configuration surface edits (§15).
+  const hashtag = tag ? discoverApi.getHashtag(tag) : undefined
+
   const onComment = (post: PublicPost) => navigate(`/community/post/${post.id}`)
+  const visible = actions.visiblePosts(posts)
 
   return (
     <div className='container-page max-w-2xl py-3 sm:py-4'>
@@ -31,32 +32,43 @@ export function HashtagPage() {
         <ArrowLeft className='h-4 w-4' /> Back
       </button>
 
-      <div className='mb-4 flex items-center gap-2'>
+      <div className='flex flex-wrap items-center gap-2'>
         <Hash className='h-5 w-5 text-primary-600' />
         <h1 className='text-lg font-bold text-gray-900'>{tag}</h1>
+        {hashtag?.featured && <span className='badge-primary'>Featured topic</span>}
+        {hashtag?.restricted && <span className='badge-warning'>Restricted topic</span>}
       </div>
+      {hashtag?.restricted && (
+        <p className='mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800'>
+          Community admins flagged this topic as restricted — posts here are subject to moderation review.
+        </p>
+      )}
+      <div className='mt-4'>
 
       {isLoading ? (
         <PostSkeleton />
-      ) : posts.length === 0 ? (
+      ) : visible.length === 0 ? (
         <EmptyState icon={<Hash className='h-10 w-10' />} title={`No posts with #${tag}`} description='Try exploring other hashtags in Discover.' action={<Button onClick={() => navigate('/community/discover')}>Go to Discover</Button>} />
       ) : (
         <div className='space-y-4'>
-          {posts.map((post) => (
+          {visible.map((post) => (
             <PostCard
               key={post.id}
               post={post}
-              onLike={() => requireAuth(() => undefined)}
-              onSave={() => requireAuth(() => undefined)}
+              liked={actions.isLiked(post.id)}
+              saved={actions.isSaved(post.id)}
+              onLike={actions.onLike}
+              onSave={actions.onSave}
               onComment={onComment}
-              onShare={(p) => requireAuth(() => setShareId(p.id))}
-              onMore={() => undefined}
+              onShare={actions.onShare}
+              onMore={actions.onMore}
             />
           ))}
         </div>
       )}
+      </div>
 
-      <ShareModal isOpen={!!shareId} onClose={() => setShareId(null)} targetType='post' targetId={shareId || undefined} />
+      {actions.modals}
     </div>
   )
 }

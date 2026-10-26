@@ -65,6 +65,7 @@ export function PostList({ posts }: { posts: PublicPost[] }) {
         isOpen={!!reportPostTarget}
         onClose={() => setReportPostTarget(null)}
         postId={reportPostTarget?.id || ''}
+        targetLabel={reportPostTarget ? (reportPostTarget.title ?? reportPostTarget.content.slice(0, 60)) : null}
         onSubmitted={reportPost}
       />
 

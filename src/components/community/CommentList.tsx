@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { CommentItem } from './CommentItem'
 import { CommentComposer } from './CommentComposer'
+import { ReportModal } from '@/components/community/ReportModal'
 import { cn } from '@/lib/utils'
 
 interface CommentListProps {
@@ -24,6 +25,7 @@ export function CommentList({ postId, className }: CommentListProps) {
   const likedCommentIds = useEngagementStore((s) => s.likedCommentIds)
   const toggleLikeComment = useEngagementStore((s) => s.toggleLikeComment)
   const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [reportTarget, setReportTarget] = useState<PublicComment | null>(null)
 
   const { data: comments = [], isLoading } = useQuery({
     queryKey: ['community', 'comments', postId],
@@ -103,6 +105,7 @@ export function CommentList({ postId, className }: CommentListProps) {
                   onLike={toggleLike}
                   onDelete={(c) => deleteMutation.mutate(c.id)}
                   onReply={() => setReplyTo((r) => (r === comment.id ? null : comment.id))}
+                  onReport={user?.id !== comment.authorId ? setReportTarget : undefined}
                 />
 
                 {replies.length > 0 && (
@@ -116,6 +119,7 @@ export function CommentList({ postId, className }: CommentListProps) {
                         onLike={toggleLike}
                         onDelete={(c) => deleteMutation.mutate(c.id)}
                         onReply={() => setReplyTo((r) => (r === comment.id ? null : comment.id))}
+                        onReport={user?.id !== reply.authorId ? setReportTarget : undefined}
                       />
                     ))}
                   </div>
@@ -138,6 +142,14 @@ export function CommentList({ postId, className }: CommentListProps) {
           })}
         </div>
       )}
+
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={() => setReportTarget(null)}
+        targetType='comment'
+        targetId={reportTarget?.id ?? ''}
+        targetLabel={reportTarget?.content.slice(0, 60) ?? null}
+      />
     </section>
   )
 }

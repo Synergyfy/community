@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, BadgeCheck, MapPin, Share2, Store, Users } from 'lucide-react'
 import { entitiesApi } from '@/services/entities.service'
 import { useAuthGate } from '@/hooks/useAuthGate'
+import { usePostActions } from '@/hooks/usePostActions'
 import type { PublicPost } from '@/types/community-public'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -31,9 +32,8 @@ export function BusinessProfilePage() {
   const navigate = useNavigate()
   const { requireAuth } = useAuthGate()
   const [tab, setTab] = useState<Tab>('posts')
-  const [likedIds, setLikedIds] = useState<string[]>([])
-  const [savedIds, setSavedIds] = useState<string[]>([])
   const [shareOpen, setShareOpen] = useState(false)
+  const actions = usePostActions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['entity', 'business', id],
@@ -130,17 +130,17 @@ export function BusinessProfilePage() {
           (posts.length === 0 ? (
             <EmptyState title='No posts yet' description='This business has not posted anything yet.' />
           ) : (
-            posts.map((post) => (
+            actions.visiblePosts(posts).map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
-                liked={likedIds.includes(post.id)}
-                saved={savedIds.includes(post.id)}
-                onLike={(p) => requireAuth(() => setLikedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
-                onSave={(p) => requireAuth(() => setSavedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
+                liked={actions.isLiked(post.id)}
+                saved={actions.isSaved(post.id)}
+                onLike={actions.onLike}
+                onSave={actions.onSave}
                 onComment={onPostComment}
-                onShare={() => requireAuth(() => setShareOpen(true))}
-                onMore={() => undefined}
+                onShare={actions.onShare}
+                onMore={actions.onMore}
               />
             ))
           ))}
@@ -174,6 +174,7 @@ export function BusinessProfilePage() {
       </div>
 
       <ShareModal isOpen={shareOpen} onClose={() => setShareOpen(false)} targetType='business' targetId={business.id} title={business.name} />
+      {actions.modals}
     </div>
   )
 }
