@@ -1,7 +1,8 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, LayoutGrid } from 'lucide-react'
-import { discoverApi, DISCOVER_CATEGORIES } from '@/services/discover.service'
+import { discoverApi } from '@/services/discover.service'
+import { categoriesService } from '@/services/categories.service'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -11,8 +12,9 @@ export function CategoryPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const category = DISCOVER_CATEGORIES.find((c) => c.id === id)
-  const title = category?.label ?? 'Category'
+  // Title comes from the admin-managed category store (§3.2).
+  const category = categoriesService.getCategory('community', id ?? '')
+  const title = category?.name ?? 'Category'
 
   const { data: businesses = [], isLoading } = useQuery({
     queryKey: ['category', id],
