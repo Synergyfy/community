@@ -4,6 +4,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import type { ShareTargetType } from '@/lib/constants'
 import { sharingApi } from '@/services/sharing.service'
+import { attributionApi } from '@/services/attribution.service'
+import { useAuthStore } from '@/stores/auth.store'
 import type { ShareCreateResult } from '@/types/community-public'
 
 interface ShareModalProps {
@@ -33,8 +35,23 @@ export function ShareModal({ isOpen, onClose, targetType, targetId, title }: Sha
     setError(false)
     sharingApi
       .createShare({ targetType, targetId })
-      .then((res) => {
+      .then(async (res) => {
         if (active) setResult(res)
+        // Remember this share so the sharer's results view can report on it.
+        const user = useAuthStore.getState().user
+        if (user) {
+          await attributionApi.recordShareCreated({
+            sharerId: user.id,
+            sharerType: user.userType === 'business' ? 'business' : user.userType === 'consumer' ? 'consumer' : 'admin',
+            targetType,
+            targetId: targetId ?? null,
+            targetTitle: title ?? null,
+            trackingCode: res.trackingCode,
+            shareUrl: res.shareUrl,
+            shareType: 'link',
+            qrCodeUrl: res.qrCodeUrl ?? null,
+          })
+        }
       })
       .catch(() => {
         if (active) setError(true)
