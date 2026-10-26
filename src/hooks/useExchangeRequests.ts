@@ -19,6 +19,15 @@ function write(map: RequestMap): void {
   window.dispatchEvent(new Event(EXCHANGE_REQUESTS_EVENT))
 }
 
+/**
+ * Synchronous read of recorded request messages (exchangeId → message).
+ * Used by the admin Messages-context panel (spec §5.3 / §17-7) which shows
+ * the demo request store behind the `view_messages_context` permission.
+ */
+export function readExchangeRequests(): RequestMap {
+  return read()
+}
+
 export function useExchangeRequests() {
   const [requests, setRequests] = useState<RequestMap>(() => read())
 

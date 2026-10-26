@@ -65,6 +65,25 @@ export const demoUsers: Record<string, PublicUser> = {
     userType: 'admin',
     isVerified: true,
   },
+  // Community Hub Managers — staff-role overlays on ordinary CHS accounts.
+  // Maya keeps her consumer membership; Tom keeps his business one. The
+  // manager appointment record (managers.service) is separate from both.
+  managerMaya: {
+    id: 'mgr1',
+    name: 'Maya Patel',
+    avatarUrl: img('maya-avatar', 128, 128),
+    userType: 'consumer',
+    isVerified: true,
+  },
+  managerTom: {
+    id: 'mgr2',
+    name: 'Tom Fisher',
+    avatarUrl: img('tom-avatar', 128, 128),
+    userType: 'business',
+    businessId: null,
+    businessName: 'Fisher Consulting',
+    isVerified: true,
+  },
 }
 
 export const demoStories: PublicStory[] = [
@@ -183,6 +202,59 @@ export const demoPosts: PublicPost[] = [
     likeCount: 124,
     commentCount: 24,
     shareCount: 8,
+  },
+  // Moderation lifecycle examples for the demo business (spec §3.2, §7):
+  // visible to the author and Admins only — never on public surfaces.
+  {
+    id: 'p-draft-1',
+    authorId: 'b1',
+    author: demoUsers.mcom!,
+    postType: 'business_info',
+    status: 'draft',
+    visibility: 'public',
+    title: 'Draft — autumn menu launch',
+    content: 'Sneak peek at our new autumn menu, launching soon. Still adding the finishing touches.',
+    businessId: 'b1',
+    location: { cityName: 'Worcester', areaName: 'City Centre' },
+    createdAt: hoursAgo(2),
+    likeCount: 0,
+    commentCount: 0,
+    shareCount: 0,
+  },
+  {
+    id: 'p-pending-1',
+    authorId: 'b1',
+    author: demoUsers.mcom!,
+    postType: 'business_info',
+    status: 'pending',
+    visibility: 'public',
+    title: 'Barista workshop announcement',
+    content: 'We are hosting a latte-art workshop later this month — awaiting review before it goes live.',
+    businessId: 'b1',
+    location: { cityName: 'Worcester', areaName: 'City Centre' },
+    createdAt: hoursAgo(3),
+    likeCount: 0,
+    commentCount: 0,
+    shareCount: 0,
+  },
+  {
+    id: 'p-rejected-1',
+    authorId: 'b1',
+    author: demoUsers.mcom!,
+    postType: 'offer',
+    status: 'rejected',
+    visibility: 'public',
+    title: 'Flash sale — everything must go',
+    content: 'Half-price espresso machines this weekend only!',
+    businessId: 'b1',
+    location: { cityName: 'Worcester', areaName: 'City Centre' },
+    createdAt: hoursAgo(4),
+    likeCount: 0,
+    commentCount: 0,
+    shareCount: 0,
+    moderationReason: 'Promotional posts require an approved offer or campaign. Please attach an offer before resubmitting.',
+    moderatedBy: 'a1',
+    moderatedAt: hoursAgo(3),
   },
   {
     id: 'p2',
@@ -312,6 +384,65 @@ export const demoPosts: PublicPost[] = [
     commentCount: 5,
     shareCount: 6,
   },
+  {
+    // Group-origin exhibit for the business side (Phase G): a post created
+    // inside the Local Business Network group — group-origin identification
+    // must work for business and consumer authors alike (§8, §9).
+    id: 'p9',
+    authorId: 'b2',
+    author: demoUsers.blooms!,
+    postType: 'group',
+    status: 'published',
+    visibility: 'group',
+    title: 'Bulk order open for spring stock',
+    content:
+      'We are putting together a joint order with the florists and the garden centre — reply here before Friday if you want to split a delivery. Open to all Local Business Network members.',
+    hashtags: ['LocalBusiness'],
+    groupId: 'g2',
+    location: { cityName: 'Worcester' },
+    createdAt: hoursAgo(20),
+    likeCount: 11,
+    commentCount: 2,
+    shareCount: 1,
+  },
+  {
+    // Reward-linked exhibit (Phase H): content promoting a central reward —
+    // the admin reward oversight screen cross-links it through `rewardId`.
+    id: 'p10',
+    authorId: 'b1',
+    author: demoUsers.mcom!,
+    postType: 'reward',
+    status: 'published',
+    visibility: 'public',
+    title: 'Free Coffee for a Month — claim yours',
+    content:
+      'Our coffee-for-a-month reward for the Winter Warmth Appeal is still open to claim. Donate to the appeal and send us your confirmation to pick yours up at the counter.',
+    campaignId: 'camp1',
+    rewardId: 'r2',
+    location: { cityName: 'Worcester' },
+    createdAt: hoursAgo(8),
+    likeCount: 9,
+    commentCount: 2,
+    shareCount: 3,
+  },
+  {
+    // Location-filter exhibit (Phase I): recorded in a second town so the
+    // Overview and Analytics location filters have a visible effect.
+    id: 'p11',
+    authorId: 'c1',
+    author: demoUsers.volunteer!,
+    postType: 'local_info',
+    status: 'published',
+    visibility: 'public',
+    title: 'Malvern repair café returns this Saturday',
+    content:
+      'The Malvern repair café is back at the community hall from 10am — bring broken lamps, bikes and small appliances. Free entry, all welcome.',
+    location: { cityName: 'Malvern' },
+    createdAt: hoursAgo(5),
+    likeCount: 7,
+    commentCount: 1,
+    shareCount: 1,
+  },
 ]
 
 export const demoComments: PublicComment[] = [
@@ -406,8 +537,66 @@ export const demoExchanges: PublicExchange[] = [
     location: { cityName: 'Worcester', areaName: 'City Centre' },
     images: [img('exchange1', 600, 400)],
     status: 'active',
+    visibility: 'public',
     expiresAt: daysFromNow(14),
     createdAt: hoursAgo(14),
+  },
+  {
+    id: 'e2',
+    creatorId: 'b2',
+    creator: demoUsers.blooms!,
+    exchangeType: 'swap',
+    title: 'Wholesale flower stock for retail display help',
+    description:
+      'Business-to-business swap: spare wholesale stock at the end of each week in exchange for help with our shop-window displays.',
+    offering: 'Wholesale flower stock',
+    seeking: 'Retail display / merchandising help',
+    categoryId: 'shopping',
+    location: { cityName: 'Worcester', areaName: 'High Street' },
+    images: null,
+    status: 'active',
+    visibility: 'business',
+    expiresAt: daysFromNow(21),
+    createdAt: hoursAgo(30),
+  },
+  {
+    // Completed state — demo data exercising the §5.3 status vocabulary
+    // (the backend owns completion; no admin or UI transition exists).
+    id: 'e3',
+    creatorId: 'c1',
+    creator: demoUsers.volunteer!,
+    exchangeType: 'swap',
+    title: 'Spare jam jars for craft session supplies',
+    description:
+      'Surplus jam jars from the summer fair swapped with the community craft group for paper, glue and a morning of help labelling.',
+    offering: 'Clean jam jars (40+)',
+    seeking: 'Craft paper and glue sticks',
+    categoryId: 'community',
+    location: { cityName: 'Worcester', areaName: 'St Johns' },
+    images: null,
+    status: 'completed',
+    visibility: 'public',
+    expiresAt: null,
+    createdAt: hoursAgo(72),
+  },
+  {
+    // Expired state — listing window passed (§5.3 vocabulary, display only).
+    id: 'e4',
+    creatorId: 'c2',
+    creator: demoUsers.organiser!,
+    exchangeType: 'offer_request',
+    title: 'Volunteer drivers for winter hamper delivery',
+    description:
+      'Request for volunteer drivers to help deliver winter hampers across Worcester during December and January.',
+    offering: 'Community volunteer reference + travel expenses',
+    seeking: 'Drivers with a car and weekday availability',
+    categoryId: 'services',
+    location: { cityName: 'Worcester' },
+    images: null,
+    status: 'expired',
+    visibility: 'public',
+    expiresAt: daysFromNow(-3),
+    createdAt: hoursAgo(120),
   },
 ]
 
@@ -443,6 +632,9 @@ export const demoOffers: PublicOffer[] = [
 
 export const demoRewards: PublicReward[] = [
   {
+    // Phase H exhibit: reward records are read-only oversight of the central
+    // Rewards system (§11) — Community holds no reward engine, so every
+    // record carries `source: 'demo'` and no local lifecycle transitions.
     id: 'r1',
     title: 'Community Champion Badge',
     valueText: 'Exclusive Badge + Profile Recognition',
@@ -451,6 +643,7 @@ export const demoRewards: PublicReward[] = [
     description: 'Earn a permanent Community Champion badge on your profile and be featured in our monthly round-up.',
     howToQualify: 'Contribute £20 or share the campaign with 5 friends.',
     status: 'available',
+    source: 'demo',
   },
   {
     id: 'r2',
@@ -461,6 +654,21 @@ export const demoRewards: PublicReward[] = [
     description: 'MCOM Coffee House will give you a free coffee every week for a month as a thank you for supporting the appeal.',
     howToQualify: 'Contribute £50 or more to the Winter Warmth Appeal.',
     status: 'available',
+    source: 'demo',
+  },
+  {
+    // Ended reward so the oversight screen exercises the full status
+    // vocabulary (available/ended) — display-only, like exchange states.
+    id: 'r3',
+    title: 'Winter Warmth Volunteer Certificate',
+    valueText: 'Certificate + monthly round-up feature',
+    imageUrl: img('reward-badge', 900, 600),
+    campaignId: 'camp1',
+    description:
+      'Everyone who volunteered with the Winter Warmth Appeal before submissions closed received this certificate and a feature in the monthly round-up.',
+    howToQualify: 'Volunteer with the Winter Warmth Appeal (campaign closed).',
+    status: 'ended',
+    source: 'demo',
   },
 ]
 

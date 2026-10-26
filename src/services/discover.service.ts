@@ -1,5 +1,7 @@
 ﻿import { api } from '@/lib/api'
 import type { ExchangeType } from '@/lib/constants'
+import { canViewExchange, canViewPost, viewerFromUser } from '@/lib/permissions'
+import { adminConfigService } from '@/services/admin-config.service'
 import {
   demoBusinesses,
   demoCampaigns,
@@ -18,27 +20,38 @@ import type {
   PublicExchange,
   PublicUser,
 } from '@/types/community-public'
+import { useAuthStore } from '@/stores/auth.store'
 
 const createdExchanges: PublicExchange[] = []
 
-
-export interface DiscoverCategory {
-  id: string
-  label: string
-  icon: string
-  count?: number
+/** Signed-in viewer (or public visitor) used for demo-mode permission checks. */
+function currentViewer() {
+  return viewerFromUser(useAuthStore.getState().user)
 }
 
-export const DISCOVER_CATEGORIES: DiscoverCategory[] = [
-  { id: 'food-drink', label: 'Food & Drink', icon: 'UtensilsCrossed' },
-  { id: 'shopping', label: 'Shopping', icon: 'ShoppingBag' },
-  { id: 'health', label: 'Health & Beauty', icon: 'HeartPulse' },
-  { id: 'home', label: 'Home & Garden', icon: 'Home' },
-  { id: 'services', label: 'Local Services', icon: 'Wrench' },
-  { id: 'community', label: 'Community', icon: 'Users' },
-  { id: 'events', label: 'Events', icon: 'CalendarDays' },
-  { id: 'causes', label: 'Causes', icon: 'HandHeart' },
-]
+function viewablePosts(posts: PublicPost[]): PublicPost[] {
+  const viewer = currentViewer()
+  return posts.filter((p) => canViewPost(viewer, p))
+}
+
+function viewableExchanges(exchanges: PublicExchange[]): PublicExchange[] {
+  const viewer = currentViewer()
+  return exchanges.filter((e) => canViewExchange(viewer, e))
+}
+
+/** Every exchange item known to the demo store (shared object references). */
+export function getAllDemoExchanges(): PublicExchange[] {
+  return [...createdExchanges, ...demoExchanges]
+}
+
+/** Hard-delete a demo exchange item from every source array (§5.3). */
+export function deleteDemoExchangeEverywhere(id: string): void {
+  const ci = createdExchanges.findIndex((e) => e.id === id)
+  if (ci >= 0) createdExchanges.splice(ci, 1)
+  const di = demoExchanges.findIndex((e) => e.id === id)
+  if (di >= 0) demoExchanges.splice(di, 1)
+}
+
 
 export interface SearchResults {
   posts: PublicPost[]
@@ -61,6 +74,7 @@ export const discoverApi = {
       if (data && data.length) return data
       throw new Error('empty')
     } catch {
+      adminConfigService.applyHashtagFlags(demoHashtags)
       return [...demoHashtags].sort((a, b) => b.usageCount - a.usageCount)
     }
   },
@@ -97,11 +111,18 @@ export const discoverApi = {
       if (data) return data
       throw new Error('empty')
     } catch {
+      adminConfigService.applyHashtagFlags(demoHashtags)
       return {
-        posts: demoPosts.filter((p) => matches(p.content, q) || matches(p.title, q) || (p.hashtags || []).some((h) => matches(h, q))),
+        posts: viewablePosts(
+          demoPosts.filter(
+            (p) => matches(p.content, q) || matches(p.title, q) || (p.hashtags || []).some((h) => matches(h, q)),
+          ),
+        ),
         businesses: demoBusinesses.filter((b) => matches(b.name, q) || matches(b.category, q)),
         campaigns: demoCampaigns.filter((c) => matches(c.title, q)),
-        exchanges: demoExchanges.filter((e) => matches(e.title, q) || matches(e.description, q)),
+        exchanges: viewableExchanges(
+          demoExchanges.filter((e) => matches(e.title, q) || matches(e.description, q)),
+        ),
         hashtags: demoHashtags.filter((h) => matches(h.tag, q)),
         communities: demoCommunities.filter(
           (c) => matches(c.name, q) || matches(c.location?.cityName, q) || matches(c.description, q),
@@ -118,8 +139,20 @@ export const discoverApi = {
       if (data && data.length) return data
       throw new Error('empty')
     } catch {
-      return demoPosts.filter((p) => (p.hashtags || []).some((h) => h.replace(/^#/, '').toLowerCase() === t))
+      return viewablePosts(demoPosts.filter((p) => (p.hashtags || []).some((h) => h.replace(/^#/, '').toLowerCase() === t)))
     }
+  },
+
+  /**
+   * Hashtag record incl. admin flags (§3.3) — reads the same objects the
+   * admin configuration surface edits, so a feature/restrict action is
+   * observed here immediately (§15: one record, many surfaces). Persisted
+   * flags are applied so the record survives reloads.
+   */
+  getHashtag(tag: string): PublicHashtag | undefined {
+    const t = tag.replace(/^#/, '').toLowerCase()
+    adminConfigService.applyHashtagFlags(demoHashtags)
+    return demoHashtags.find((h) => h.tag.toLowerCase() === t || h.slug === t)
   },
 
   async getCategoryBusinesses(category: string): Promise<PublicBusiness[]> {
@@ -143,7 +176,7 @@ export const discoverApi = {
       if (data && data.length) return data
       throw new Error('empty')
     } catch {
-      const all = [...createdExchanges, ...demoExchanges]
+      const all = viewableExchanges([...createdExchanges, ...demoExchanges])
       if (!location) return all
       return all.filter((e) => !e.location?.cityName || e.location.cityName.toLowerCase() === location.toLowerCase())
     }
@@ -152,9 +185,11 @@ export const discoverApi = {
   async getExchange(id: string): Promise<PublicExchange | null> {
     try {
       const res = await api.get(`/community/exchanges/${id}`)
-      return (res.data?.data as PublicExchange) || null
+      const exchange = (res.data?.data as PublicExchange) || null
+      return exchange && canViewExchange(currentViewer(), exchange) ? exchange : null
     } catch {
-      return createdExchanges.find((e) => e.id === id) || demoExchanges.find((e) => e.id === id) || null
+      const exchange = createdExchanges.find((e) => e.id === id) || demoExchanges.find((e) => e.id === id) || null
+      return exchange && canViewExchange(currentViewer(), exchange) ? exchange : null
     }
   },
 
@@ -187,6 +222,7 @@ export const discoverApi = {
         location: input.location ?? null,
         images: null,
         status: 'active',
+        visibility: 'public',
         expiresAt: null,
         createdAt: new Date().toISOString(),
       }

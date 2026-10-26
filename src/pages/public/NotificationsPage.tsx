@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Bell, Megaphone, MessageSquare, Repeat, Trash2, UserPlus, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useNotificationsStore } from '@/stores/notifications.store'
+import { useAuthStore } from '@/stores/auth.store'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/format'
@@ -16,12 +17,31 @@ const ICONS: Record<string, ReactNode> = {
 }
 
 export function NotificationsPage() {
+  const location = useLocation()
+  const { authStatus } = useAuthStore()
   const items = useNotificationsStore((s) => s.items)
   const markRead = useNotificationsStore((s) => s.markRead)
   const markAllRead = useNotificationsStore((s) => s.markAllRead)
   const clear = useNotificationsStore((s) => s.clear)
 
   const unreadCount = items.filter((n) => !n.read).length
+
+  if (authStatus !== 'authenticated') {
+    return (
+      <div className='container-page max-w-2xl py-3 sm:py-4'>
+        <EmptyState
+          icon={<Bell className='h-10 w-10' />}
+          title='Sign in to see your activity'
+          description='Notifications, replies and invitations will appear here.'
+          action={
+            <Link to='/auth/login' state={{ from: location }} className='btn-primary'>
+              Sign in
+            </Link>
+          }
+        />
+      </div>
+    )
+  }
 
   return (
     <div className='container-page max-w-2xl space-y-4 py-3 sm:py-4'>

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Activity } from 'lucide-react'
 import { communityApi } from '@/services/community.service'
@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 
 export function ActivityPage() {
   const { user, authStatus } = useAuthStore()
+  const location = useLocation()
 
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ['community', 'author', user?.id],
@@ -31,7 +32,7 @@ export function ActivityPage() {
           title='Sign in to see your activity'
           description='Your posts and exchanges will appear here.'
           action={
-            <Link to='/auth/login' className='btn-primary'>
+            <Link to='/auth/login' state={{ from: location }} className='btn-primary'>
               Sign in
             </Link>
           }

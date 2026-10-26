@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PostCard } from '@/components/community/PostCard'
+import { AnnouncementStrip } from '@/components/community/AnnouncementStrip'
 import { ShareModal } from '@/components/sharing/ShareModal'
 import { locationLabel } from '@/lib/format'
 import { useAuthGate } from '@/hooks/useAuthGate'
+import { usePostActions } from '@/hooks/usePostActions'
 import type { PublicPost } from '@/types/community-public'
 
 export function GroupDetailPage() {
@@ -22,6 +24,7 @@ export function GroupDetailPage() {
   const { isRequested, requestJoin, cancelRequest } = useGroupRequests()
   const addNotification = useNotificationsStore((s) => s.addNotification)
   const [shareOpen, setShareOpen] = useState(false)
+  const actions = usePostActions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['entity', 'group', id],
@@ -128,18 +131,32 @@ export function GroupDetailPage() {
         </div>
       </div>
 
+      {/* Group-scoped announcements (spec §4, §15) — same records as every surface */}
+      <AnnouncementStrip groupId={group.id} className='mt-4' />
+
       <h2 className='mb-3 mt-5 text-sm font-semibold text-gray-900'>Group posts</h2>
       {posts.length === 0 ? (
         <EmptyState title='No posts yet' description='Group members have not posted anything yet.' />
       ) : (
         <div className='space-y-4'>
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} onComment={onPostComment} onShare={() => requireAuth(() => setShareOpen(true))} onMore={() => undefined} />
+          {actions.visiblePosts(posts).map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              liked={actions.isLiked(post.id)}
+              saved={actions.isSaved(post.id)}
+              onLike={actions.onLike}
+              onSave={actions.onSave}
+              onComment={onPostComment}
+              onShare={actions.onShare}
+              onMore={actions.onMore}
+            />
           ))}
         </div>
       )}
 
       <ShareModal isOpen={shareOpen} onClose={() => setShareOpen(false)} targetType='group' targetId={group.id} title={group.name} />
+      {actions.modals}
     </div>
   )
 }

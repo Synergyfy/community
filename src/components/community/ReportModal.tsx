@@ -1,30 +1,42 @@
 ﻿import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { communityApi } from '@/services/community.service'
+import { reportsService } from '@/services/reports.service'
+import { adminConfigService } from '@/services/admin-config.service'
 import { cn } from '@/lib/utils'
-
-const REPORT_REASONS = [
-  { id: 'spam', label: 'Spam or misleading' },
-  { id: 'harassment', label: 'Harassment or bullying' },
-  { id: 'hate', label: 'Hate speech' },
-  { id: 'violence', label: 'Violence or dangerous content' },
-  { id: 'misinformation', label: 'False information' },
-  { id: 'other', label: 'Something else' },
-] as const
+import type { ReportTargetType } from '@/types/community-public'
 
 interface ReportModalProps {
   isOpen: boolean
   onClose: () => void
-  postId: string
-  onSubmitted?: (postId: string) => void
+  /** Post target id — kept for existing call sites (implies `post`). */
+  postId?: string
+  /** Explicit target for comment/exchange/user reports (§3.6). */
+  targetType?: ReportTargetType
+  targetId?: string
+  targetLabel?: string | null
+  onSubmitted?: (targetId: string) => void
 }
 
-export function ReportModal({ isOpen, onClose, postId, onSubmitted }: ReportModalProps) {
+export function ReportModal({
+  isOpen,
+  onClose,
+  postId,
+  targetType = 'post',
+  targetId,
+  targetLabel,
+  onSubmitted,
+}: ReportModalProps) {
   const [reason, setReason] = useState<string>('')
   const [details, setDetails] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Reasons are admin-configurable data (§3.6), not a hardcoded frontend list.
+  const [reasons] = useState(() => adminConfigService.listReportReasons())
+
+  const resolvedType: ReportTargetType = postId && !targetId ? 'post' : targetType
+  const resolvedId = targetId ?? postId ?? ''
+  const noun = resolvedType === 'post' ? 'post' : resolvedType === 'comment' ? 'comment' : resolvedType === 'exchange' ? 'exchange item' : 'account'
 
   const close = () => {
     onClose()
@@ -36,11 +48,17 @@ export function ReportModal({ isOpen, onClose, postId, onSubmitted }: ReportModa
   }
 
   const submit = async () => {
-    if (!reason || submitting) return
+    if (!reason || submitting || !resolvedId) return
     setSubmitting(true)
     try {
-      await communityApi.reportPost(postId, reason, details.trim() || undefined)
-      onSubmitted?.(postId)
+      await reportsService.submitReport({
+        targetType: resolvedType,
+        targetId: resolvedId,
+        targetLabel: targetLabel ?? null,
+        reasonCode: reason,
+        details: details.trim() || null,
+      })
+      onSubmitted?.(resolvedId)
       setSubmitted(true)
     } finally {
       setSubmitting(false)
@@ -48,7 +66,7 @@ export function ReportModal({ isOpen, onClose, postId, onSubmitted }: ReportModa
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title={submitted ? 'Thank you' : 'Report this post'}>
+    <Modal isOpen={isOpen} onClose={close} title={submitted ? 'Thank you' : `Report this ${noun}`}>
       {submitted ? (
         <div className='space-y-4'>
           <p className='text-sm text-gray-600'>
@@ -60,9 +78,9 @@ export function ReportModal({ isOpen, onClose, postId, onSubmitted }: ReportModa
         </div>
       ) : (
         <div className='space-y-4'>
-          <p className='text-sm text-gray-600'>Why are you reporting this post?</p>
+          <p className='text-sm text-gray-600'>Why are you reporting this {noun}?</p>
           <div className='space-y-1'>
-            {REPORT_REASONS.map((r) => (
+            {reasons.map((r) => (
               <button
                 key={r.id}
                 onClick={() => setReason(r.id)}

@@ -1,4 +1,5 @@
 import { api } from '@/lib/api'
+import { canViewPost, viewerFromUser } from '@/lib/permissions'
 import {
   demoBusinesses,
   demoCampaigns,
@@ -15,6 +16,7 @@ import type {
   PublicPost,
   PublicReward,
 } from '@/types/community-public'
+import { useAuthStore } from '@/stores/auth.store'
 
 export interface BusinessProfile {
   business: PublicBusiness
@@ -43,6 +45,11 @@ async function getData<T>(path: string): Promise<T | null> {
   }
 }
 
+function viewablePosts(posts: PublicPost[]): PublicPost[] {
+  const viewer = viewerFromUser(useAuthStore.getState().user)
+  return posts.filter((p) => canViewPost(viewer, p))
+}
+
 export const entitiesApi = {
   async getGroups(location?: string): Promise<PublicGroup[]> {
     try {
@@ -66,7 +73,7 @@ export const entitiesApi = {
     if (!business) return null
     return {
       business,
-      posts: demoPosts.filter((p) => p.businessId === id),
+      posts: viewablePosts(demoPosts.filter((p) => p.businessId === id)),
       offers: demoOffers.filter((o) => o.businessId === id),
       campaigns: demoCampaigns.filter((c) => c.businessId === id),
     }
@@ -80,7 +87,7 @@ export const entitiesApi = {
     if (!campaign) return null
     return {
       campaign,
-      updates: demoPosts.filter((p) => p.campaignId === id),
+      updates: viewablePosts(demoPosts.filter((p) => p.campaignId === id)),
       rewards: demoRewards.filter((r) => r.campaignId === id),
     }
   },
