@@ -4,17 +4,15 @@ import { useQuery } from '@tanstack/react-query'
 import { SearchX, Repeat } from 'lucide-react'
 import { discoverApi } from '@/services/discover.service'
 import { useDebounce } from '@/hooks/useDebounce'
-import { useAuthGate } from '@/hooks/useAuthGate'
 import { useCommunityLocation } from '@/hooks/useCommunityLocation'
+import { usePostActions } from '@/hooks/usePostActions'
 import type { PublicPost } from '@/types/community-public'
-import type { ShareTargetType } from '@/lib/constants'
 import { SearchBar } from '@/components/discover/SearchBar'
 import { BusinessCard } from '@/components/discover/BusinessCard'
 import { CampaignCard } from '@/components/discover/CampaignCard'
 import { CommunityCard } from '@/components/discover/CommunityCard'
 import { PostCard } from '@/components/community/PostCard'
 import { PostSkeleton } from '@/components/community/PostSkeleton'
-import { ShareModal } from '@/components/sharing/ShareModal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { saveLocation } from '@/lib/location'
 import { cn } from '@/lib/utils'
@@ -33,15 +31,12 @@ type Tab = (typeof TABS)[number]['id']
 export function SearchResultsPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const { requireAuth } = useAuthGate()
   const location = useCommunityLocation()
+  const actions = usePostActions()
 
   const urlQuery = params.get('q') || ''
   const [input, setInput] = useState(urlQuery)
   const [tab, setTab] = useState<Tab>('all')
-  const [likedIds, setLikedIds] = useState<string[]>([])
-  const [savedIds, setSavedIds] = useState<string[]>([])
-  const [share, setShare] = useState<{ type: ShareTargetType; id?: string; title?: string } | null>(null)
 
   const debounced = useDebounce(input, 350)
 
@@ -70,11 +65,7 @@ export function SearchResultsPage() {
   }
 
   const onComment = (post: PublicPost) => navigate(`/community/post/${post.id}`)
-  const onShare = (post: PublicPost) => {
-    const type: ShareTargetType = post.campaignId ? 'campaign' : post.exchangeId ? 'exchange' : 'post'
-    const id = post.campaignId || post.exchangeId || post.id
-    requireAuth(() => setShare({ type, id: id || undefined, title: post.title || undefined }))
-  }
+  const visiblePosts = actions.visiblePosts(results.posts)
 
   const showPosts = tab === 'all' || tab === 'posts'
   const showCommunities = tab === 'all' || tab === 'communities'
@@ -111,20 +102,20 @@ export function SearchResultsPage() {
         <EmptyState icon={<SearchX className='h-10 w-10' />} title={`No results for “${debounced}”`} description='Try a different search term.' />
       ) : (
         <div className='space-y-6'>
-          {showPosts && results.posts.length > 0 && (
+          {showPosts && visiblePosts.length > 0 && (
             <section className='space-y-4'>
               {tab === 'all' && <h2 className='text-sm font-semibold text-gray-900'>Posts</h2>}
-              {results.posts.map((post) => (
+              {visiblePosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
-                  liked={likedIds.includes(post.id)}
-                  saved={savedIds.includes(post.id)}
-                  onLike={(p) => requireAuth(() => setLikedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
-                  onSave={(p) => requireAuth(() => setSavedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
+                  liked={actions.isLiked(post.id)}
+                  saved={actions.isSaved(post.id)}
+                  onLike={actions.onLike}
+                  onSave={actions.onSave}
                   onComment={onComment}
-                  onShare={onShare}
-                  onMore={() => undefined}
+                  onShare={actions.onShare}
+                  onMore={actions.onMore}
                 />
               ))}
             </section>
@@ -193,13 +184,7 @@ export function SearchResultsPage() {
         </div>
       )}
 
-      <ShareModal
-        isOpen={!!share}
-        onClose={() => setShare(null)}
-        targetType={share?.type || 'post'}
-        targetId={share?.id}
-        title={share?.title}
-      />
+      {actions.modals}
     </div>
   )
 }

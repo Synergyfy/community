@@ -21,7 +21,59 @@ export interface AuthResult {
 }
 
 function demoLogin(email: string): AuthResult {
-  const base = email.split('@')[0] || 'Neighbour'
+  const base = email.split('@')[0] || 'neighbour'
+  const slug = base.toLowerCase()
+  const tokens = {
+    accessToken: `demo-${Date.now()}`,
+    refreshToken: `demo-refresh-${Date.now()}`,
+  }
+
+  if (slug.startsWith('business') || slug === 'mcom') {
+    return {
+      user: {
+        id: 'b1',
+        name: 'MCOM Coffee House',
+        email,
+        userType: 'business',
+        avatarUrl: null,
+        businessId: 'b1',
+        businessName: 'MCOM Coffee House',
+        isVerified: true,
+      },
+      ...tokens,
+    }
+  }
+
+  if (slug.startsWith('admin')) {
+    return {
+      user: {
+        id: 'a1',
+        name: 'Central Hub',
+        email,
+        userType: 'admin',
+        avatarUrl: null,
+        isVerified: true,
+      },
+      ...tokens,
+    }
+  }
+
+  // Community Hub Manager demo — Maya Patel: an ordinary consumer CHS account
+  // that also holds an active manager appointment (managers.service).
+  if (slug.startsWith('manager') || slug === 'maya') {
+    return {
+      user: {
+        id: 'mgr1',
+        name: 'Maya Patel',
+        email,
+        userType: 'consumer',
+        avatarUrl: null,
+        isVerified: true,
+      },
+      ...tokens,
+    }
+  }
+
   return {
     user: {
       id: 'me',
@@ -30,8 +82,7 @@ function demoLogin(email: string): AuthResult {
       userType: 'consumer',
       avatarUrl: null,
     },
-    accessToken: `demo-${Date.now()}`,
-    refreshToken: `demo-refresh-${Date.now()}`,
+    ...tokens,
   }
 }
 

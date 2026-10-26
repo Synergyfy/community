@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Clock, MapPin, Repeat, Share2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Flag, MapPin, Repeat, Share2 } from 'lucide-react'
 import { discoverApi } from '@/services/discover.service'
 import { useAuthGate } from '@/hooks/useAuthGate'
 import { useExchangeRequests } from '@/hooks/useExchangeRequests'
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
 import { ShareModal } from '@/components/sharing/ShareModal'
+import { ReportModal } from '@/components/community/ReportModal'
 import { exchangeTypeLabel } from '@/lib/exchange'
 import { locationLabel, timeAgo, timeUntil } from '@/lib/format'
 
@@ -24,6 +25,7 @@ export function ExchangeDetailPage() {
 
   const [shareOpen, setShareOpen] = useState(false)
   const [requestOpen, setRequestOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [message, setMessage] = useState('')
 
   const { data: exchange, isLoading, isError } = useQuery({
@@ -148,6 +150,13 @@ export function ExchangeDetailPage() {
             </Button>
           </div>
 
+          <button
+            onClick={() => setReportOpen(true)}
+            className='mt-2 flex items-center gap-1 text-xs text-gray-500 hover:text-red-600'
+          >
+            <Flag className='h-3 w-3' /> Report this listing
+          </button>
+
           {isRequested(exchange.id) && (
             <p className='mt-2 text-xs text-amber-600'>Your request has been sent. You will be notified when it is accepted.</p>
           )}
@@ -183,6 +192,14 @@ export function ExchangeDetailPage() {
           </div>
         </div>
       </Modal>
+
+      <ReportModal
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType='exchange'
+        targetId={exchange.id}
+        targetLabel={exchange.title}
+      />
     </div>
   )
 }

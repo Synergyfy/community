@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { MoreHorizontal, Trash2 } from 'lucide-react'
+import { Flag, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 import { timeAgo } from '@/lib/format'
@@ -12,9 +12,11 @@ interface CommentItemProps {
   onLike?: (comment: PublicComment) => void
   onDelete?: (comment: PublicComment) => void
   onReply?: (comment: PublicComment) => void
+  /** Report entry point (§3.6) — provided when the viewer may report. */
+  onReport?: (comment: PublicComment) => void
 }
 
-export function CommentItem({ comment, liked, canDelete, onLike, onDelete, onReply }: CommentItemProps) {
+export function CommentItem({ comment, liked, canDelete, onLike, onDelete, onReply, onReport }: CommentItemProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -35,21 +37,36 @@ export function CommentItem({ comment, liked, canDelete, onLike, onDelete, onRep
               Reply
             </button>
           )}
-          {(canDelete || onDelete) && (
+          {(canDelete || onReport) && (
             <div className='relative'>
               <button onClick={() => setMenuOpen((o) => !o)} className='hover:text-gray-700' aria-label='Comment options'>
                 <MoreHorizontal className='h-3.5 w-3.5' />
               </button>
-              {menuOpen && canDelete && (
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onDelete?.(comment)
-                  }}
-                  className='absolute left-0 z-10 mt-1 flex items-center gap-1 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-red-600 shadow-sm'
-                >
-                  <Trash2 className='h-3 w-3' /> Delete
-                </button>
+              {menuOpen && (
+                <div className='absolute left-0 z-10 mt-1 flex flex-col items-start gap-1 whitespace-nowrap rounded-md border border-gray-200 bg-white shadow-sm'>
+                  {canDelete && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onDelete?.(comment)
+                      }}
+                      className='flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50'
+                    >
+                      <Trash2 className='h-3 w-3' /> Delete
+                    </button>
+                  )}
+                  {onReport && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        onReport(comment)
+                      }}
+                      className='flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-700 hover:bg-gray-50'
+                    >
+                      <Flag className='h-3 w-3' /> Report
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
