@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CalendarClock, HeartHandshake, MapPin, Share2, Megaphone } from 'lucide-react'
 import { entitiesApi } from '@/services/entities.service'
 import { useAuthGate } from '@/hooks/useAuthGate'
+import { usePostActions } from '@/hooks/usePostActions'
 import type { PublicPost } from '@/types/community-public'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -33,8 +34,7 @@ export function CampaignDetailPage() {
   const [tab, setTab] = useState<Tab>('story')
   const [shareOpen, setShareOpen] = useState(false)
   const [contributeOpen, setContributeOpen] = useState(false)
-  const [likedIds, setLikedIds] = useState<string[]>([])
-  const [savedIds, setSavedIds] = useState<string[]>([])
+  const actions = usePostActions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['entity', 'campaign', id],
@@ -160,17 +160,17 @@ export function CampaignDetailPage() {
           (updates.length === 0 ? (
             <EmptyState title='No updates yet' description='The organiser has not posted any updates.' />
           ) : (
-            updates.map((post) => (
+            actions.visiblePosts(updates).map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
-                liked={likedIds.includes(post.id)}
-                saved={savedIds.includes(post.id)}
-                onLike={(p) => requireAuth(() => setLikedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
-                onSave={(p) => requireAuth(() => setSavedIds((ids) => (ids.includes(p.id) ? ids.filter((i) => i !== p.id) : [...ids, p.id])))}
+                liked={actions.isLiked(post.id)}
+                saved={actions.isSaved(post.id)}
+                onLike={actions.onLike}
+                onSave={actions.onSave}
                 onComment={onPostComment}
-                onShare={() => requireAuth(() => setShareOpen(true))}
-                onMore={() => undefined}
+                onShare={actions.onShare}
+                onMore={actions.onMore}
               />
             ))
           ))}
@@ -188,6 +188,7 @@ export function CampaignDetailPage() {
       </div>
 
       <ShareModal isOpen={shareOpen} onClose={() => setShareOpen(false)} targetType='campaign' targetId={campaign.id} title={campaign.title} />
+      {actions.modals}
       <ComingSoonModal
         isOpen={contributeOpen}
         onClose={() => setContributeOpen(false)}
